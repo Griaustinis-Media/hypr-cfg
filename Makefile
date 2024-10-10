@@ -1,2 +1,2 @@
 build:
-	go build cmd/cli/main.go -o bin/hypr-cfg
+	go build -o bin/hypr-cfg cmd/cli/main.go

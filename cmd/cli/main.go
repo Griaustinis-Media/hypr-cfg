@@ -3,6 +3,8 @@ package main
 import (
   "os"
   "log"
+
+  "griaustinismedia/hypr-cfg/pkg"
 )
 
 func main() {
@@ -12,8 +14,15 @@ func main() {
   if len(args) > 0 {
     cfgPath = args[0]
   } else {
-    cfgPath = "~/.config/hypr/hyprland.conf"
+    log.Fatal("Please provide config path")
   }
 
   log.Printf("Loading config from path: '%s'", cfgPath)
+
+  cfg, err := pkg.ReadConfig(cfgPath)
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  cfg.Show()
 }
