@@ -4,13 +4,36 @@ import (
   "os"
   "fmt"
   "bufio"
+  "strings"
+)
+
+type LineType int
+
+const (
+  Empty   LineType  = 0
+  Comment           = 1
+  Other             = 2
 )
 
 type RawLine struct {
   LineNo  int
   Content string
+  Type    LineType
 
   next    *RawLine
+}
+
+func ParseLine(lineNo int, content string) RawLine {
+  n := strings.Trim(content, " ")
+  var lineType LineType
+  if n == "" {
+    lineType = Empty
+  } else if strings.HasPrefix(n, "#") {
+    lineType = Comment
+  } else {
+    lineType = Other
+  }
+  return RawLine{ LineNo: lineNo, Content: content, Type: lineType }
 }
 
 
@@ -37,7 +60,7 @@ func (c ConfigFile) Show() {
     if current == nil {
       break
     }
-    fmt.Printf("%d: %s\n", current.LineNo, current.Content)
+    fmt.Printf("%d[%d]: %s\n", current.LineNo, current.Type, current.Content)
     current = current.next
   }
 }
@@ -56,7 +79,7 @@ func ReadConfig(fpath string) (*ConfigFile, error) {
   lineNum := 0
   for scanner.Scan() {
     lineNum += 1
-    cfg.appendLine(RawLine{ LineNo: lineNum, Content: scanner.Text() })
+    cfg.appendLine(ParseLine(lineNum, scanner.Text()))
   }
 
 
