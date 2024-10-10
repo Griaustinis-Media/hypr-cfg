@@ -61,8 +61,9 @@ func ParseLine(lineNo int, content string) RawLine {
 }
 
 type ConfigFile struct {
-	head    *RawLine
-	current *RawLine
+	head     *RawLine
+	current  *RawLine
+	branches []Branch
 }
 
 func (c *ConfigFile) appendLine(n RawLine) {
@@ -75,16 +76,76 @@ func (c *ConfigFile) appendLine(n RawLine) {
 	}
 }
 
+func DisplayBranch(b Branch, depth int) {
+	ident := strings.Repeat("\t", depth)
+	if len(b.Children) > 0 {
+		fmt.Printf("%sBLOCK: %s\n", ident, b.Line.Content)
+		for _, c := range b.Children {
+			DisplayBranch(c, depth+1)
+		}
+	} else {
+		fmt.Printf("%s%d[%d]: %s\n", ident, b.Line.LineNo, b.Line.Type, b.Line.Content)
+	}
+}
+
 func (c ConfigFile) Show() {
+	for _, b := range c.branches {
+		DisplayBranch(b, 0)
+	}
+}
+
+type Branch struct {
+	Line     *RawLine
+	Children []Branch
+}
+
+func BuildBranch(current *RawLine) ([]Branch, *RawLine) {
+	stack := make([]Branch, 0)
+	for {
+		if current == nil {
+			break
+		}
+
+		if current.Type == Comment || current.Type == Empty {
+			current = current.next
+			continue
+		} else if current.Type == BlockStart {
+			children, ptr := BuildBranch(current.next)
+			stack = append(stack, Branch{Line: current, Children: children})
+			current = ptr
+		} else if current.Type == BlockEnd {
+			break
+		} else {
+			stack = append(stack, Branch{Line: current})
+		}
+
+		current = current.next
+	}
+
+	return stack, current
+}
+
+func (c *ConfigFile) BuildTree() {
 	current := c.head
+	branches := make([]Branch, 0)
 
 	for {
 		if current == nil {
 			break
 		}
-		fmt.Printf("%d[%d]: %s\n", current.LineNo, current.Type, current.Content)
+
+		if current.Type == BlockStart {
+			children, ptr := BuildBranch(current.next)
+			branches = append(branches, Branch{Line: current, Children: children})
+			current = ptr
+		} else if current.Type != Comment && current.Type != Empty {
+			branches = append(branches, Branch{Line: current})
+		}
+
 		current = current.next
 	}
+
+	c.branches = branches
 }
 
 func ReadConfig(fpath string) (*ConfigFile, error) {
@@ -103,6 +164,8 @@ func ReadConfig(fpath string) (*ConfigFile, error) {
 		lineNum += 1
 		cfg.appendLine(ParseLine(lineNum, scanner.Text()))
 	}
+
+	cfg.BuildTree()
 
 	return &cfg, nil
 }
