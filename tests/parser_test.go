@@ -34,4 +34,8 @@ func TestParseExampleFile(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	cfg.Show()
+
+  grouped := pkg.BuildGroupedConfig(cfg)
+
+  assert.True(t, len(grouped.Variables) > 0)
 }

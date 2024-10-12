@@ -31,6 +31,27 @@ type RawLine struct {
 	next *RawLine
 }
 
+type ValuePart struct {
+  Values  []string
+}
+
+type KeyPart struct {
+  Key string
+}
+
+func (r *RawLine) Parse() (KeyPart, ValuePart) {
+  buff := strings.Split(r.Content, "=")
+  k := KeyPart { Key: strings.TrimSpace(buff[0]) }
+  valuesRaw := strings.Split(buff[1], ",")
+  valuesNormalized := make([]string, len(valuesRaw))
+  for i := range valuesRaw {
+    valuesNormalized[i] = strings.TrimSpace(valuesRaw[i])
+  }
+  v := ValuePart { Values: valuesNormalized }
+
+  return k, v
+}
+
 func ParseLine(lineNo int, content string) RawLine {
 	n := strings.Trim(content, " ")
 	var lineType LineType
@@ -75,6 +96,7 @@ func (c *ConfigFile) appendLine(n RawLine) {
 		c.current = &n
 	}
 }
+
 
 func DisplayBranch(b Branch, depth int) {
 	ident := strings.Repeat("\t", depth)
@@ -168,4 +190,28 @@ func ReadConfig(fpath string) (*ConfigFile, error) {
 	cfg.BuildTree()
 
 	return &cfg, nil
+}
+
+
+type GroupedItem struct {
+  Ref   *RawLine
+  Key   KeyPart
+  Value ValuePart
+}
+
+type GroupedConfig struct {
+  Variables []GroupedItem
+}
+
+func BuildGroupedConfig(cfg *ConfigFile) GroupedConfig {
+  variables := make([]GroupedItem, 0)
+
+	for _, b := range cfg.branches {
+		if b.Line.Type == Variable {
+      k, v := b.Line.Parse()
+      variables = append(variables, GroupedItem{ Ref: b.Line, Key: k, Value: v})
+    }
+	}
+
+  return GroupedConfig{ Variables: variables }
 }
