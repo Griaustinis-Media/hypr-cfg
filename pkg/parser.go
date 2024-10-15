@@ -3,8 +3,10 @@ package pkg
 import (
 	"bufio"
 	"fmt"
+  "io"
 	"os"
 	"strings"
+  "path/filepath"
 )
 
 type LineType int
@@ -33,6 +35,10 @@ type RawLine struct {
 
 type ValuePart struct {
   Values  []string
+}
+
+func (v ValuePart) ToString() string {
+  return strings.Join(v.Values, ", ")
 }
 
 type KeyPart struct {
@@ -68,7 +74,10 @@ func (r *RawLine) Parse(skipKey bool) (KeyPart, ValuePart) {
 }
 
 func (r *RawLine) Update(value string) {
+  k, _ := r.Parse(false)
 
+  result := fmt.Sprintf("%s = %s", k.Key, value)
+  r.Content = result
 }
 
 func ParseLine(lineNo int, content string) RawLine {
@@ -105,6 +114,74 @@ type ConfigFile struct {
 	head     *RawLine
 	current  *RawLine
 	branches []Branch
+}
+
+func (c *ConfigFile) backup() error {
+  src, err := os.Open(c.Source)
+  if err != nil {
+    return err
+  }
+
+  defer src.Close()
+
+  dir, fname := filepath.Split(c.Source)
+  dest, err := os.Create(fmt.Sprintf("%s/~%s", dir, fname))
+
+  if err != nil {
+    return err
+  }
+
+  defer dest.Close()
+
+  _, err = io.Copy(src, dest)
+
+  if err != nil {
+    return err
+  }
+
+  err = dest.Sync()
+
+  if err != nil {
+    return err
+  }
+
+  return nil
+}
+
+func (c *ConfigFile) Flush() {
+  // Do backup before doing anything stupid
+  err := c.backup()
+  if err != nil {
+    panic(err)
+  }
+
+  fh, err := os.Create(c.Source)
+  if err != nil {
+    panic(err)
+  }
+
+  defer fh.Close()
+
+  w := bufio.NewWriter(fh)
+
+  current := c.head
+
+  for {
+    _, err := w.WriteString(current.Content + "\n")
+    if err != nil {
+      panic(err)
+    }
+
+    current = current.next
+    if current == nil {
+      break
+    }
+  }
+
+  err = w.Flush()
+  if err != nil {
+    panic(err)
+  }
 }
 
 func (c *ConfigFile) appendLine(n RawLine) {

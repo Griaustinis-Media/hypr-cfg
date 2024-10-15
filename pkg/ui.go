@@ -37,7 +37,7 @@ func openEditView(pager *tview.Pages, form *tview.Form, ref *RawLine) {
   // Form set value
   item := form.GetFormItemByLabel("Value")
   _, v := ref.Parse(false)
-  item.(*tview.InputField).SetText(strings.Join(v.Values, ", "))
+  item.(*tview.InputField).SetText(v.ToString())
   selectedLine = ref
   pager.ShowPage("edit")
 }
