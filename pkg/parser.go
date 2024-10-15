@@ -39,17 +39,36 @@ type KeyPart struct {
   Key string
 }
 
-func (r *RawLine) Parse() (KeyPart, ValuePart) {
+func (r *RawLine) Parse(skipKey bool) (KeyPart, ValuePart) {
   buff := strings.Split(r.Content, "=")
   k := KeyPart { Key: strings.TrimSpace(buff[0]) }
-  valuesRaw := strings.Split(buff[1], ",")
+  if len(buff) == 1 {
+    return k, ValuePart{ Values: make([]string, 0) }
+  }
+  var valuesSansComments string
+  if strings.Contains(buff[1], "#") {
+    valuesSansComments = strings.Split(buff[1], "#")[0]
+  } else {
+    valuesSansComments = buff[1]
+  }
+  valuesRaw := strings.Split(valuesSansComments, ",")
+
   valuesNormalized := make([]string, len(valuesRaw))
   for i := range valuesRaw {
     valuesNormalized[i] = strings.TrimSpace(valuesRaw[i])
   }
-  v := ValuePart { Values: valuesNormalized }
 
-  return k, v
+  if skipKey {
+    v := ValuePart { Values: valuesNormalized[1:] }
+    return KeyPart{ Key: valuesNormalized[0] }, v
+  } else {
+    v := ValuePart { Values: valuesNormalized }
+    return k, v
+  }
+}
+
+func (r *RawLine) Update(value string) {
+
 }
 
 func ParseLine(lineNo int, content string) RawLine {
@@ -82,6 +101,7 @@ func ParseLine(lineNo int, content string) RawLine {
 }
 
 type ConfigFile struct {
+  Source  string
 	head     *RawLine
 	current  *RawLine
 	branches []Branch
@@ -179,7 +199,7 @@ func ReadConfig(fpath string) (*ConfigFile, error) {
 
 	defer file.Close()
 
-	cfg := ConfigFile{}
+  cfg := ConfigFile{ Source: fpath }
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
 	for scanner.Scan() {
@@ -200,18 +220,46 @@ type GroupedItem struct {
 }
 
 type GroupedConfig struct {
+  Source    string
   Variables []GroupedItem
+  Monitors  []GroupedItem
+  Env       []GroupedItem
+  Autostart []GroupedItem
+  Bindings  []GroupedItem
 }
 
 func BuildGroupedConfig(cfg *ConfigFile) GroupedConfig {
   variables := make([]GroupedItem, 0)
+  monitors := make([]GroupedItem, 0)
+  env := make([]GroupedItem, 0)
+  autostart := make([]GroupedItem, 0)
+  bindings := make([]GroupedItem, 0)
 
 	for _, b := range cfg.branches {
 		if b.Line.Type == Variable {
-      k, v := b.Line.Parse()
+      k, v := b.Line.Parse(false)
       variables = append(variables, GroupedItem{ Ref: b.Line, Key: k, Value: v})
+    } else if b.Line.Type == Monitor {
+      k, v := b.Line.Parse(true)
+      monitors = append(monitors, GroupedItem{ Ref: b.Line, Key: k, Value: v})
+    } else if b.Line.Type == EnvVariable {
+      k, v := b.Line.Parse(true)
+      env = append(env, GroupedItem{ Ref: b.Line, Key: k, Value: v})
+    } else if b.Line.Type == Autostart {
+      k, v := b.Line.Parse(true)
+      autostart = append(autostart, GroupedItem{ Ref: b.Line, Key: k, Value: v})
+    } else if b.Line.Type == Binding {
+      k, v := b.Line.Parse(false)
+      bindings = append(bindings, GroupedItem{ Ref: b.Line, Key: k, Value: v})
     }
 	}
 
-  return GroupedConfig{ Variables: variables }
+  return GroupedConfig{
+    Source: cfg.Source, 
+    Variables: variables, 
+    Monitors: monitors, 
+    Env: env, 
+    Autostart: autostart,
+    Bindings: bindings,
+  }
 }
