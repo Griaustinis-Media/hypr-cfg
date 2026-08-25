@@ -12,17 +12,22 @@ import (
 type LineType int
 
 const (
-	Empty       LineType = 0
-	Comment              = 1
-	Variable             = 2
-	Monitor              = 3
-	EnvVariable          = 4
-	Autostart            = 5
-	Binding              = 6
-	WindowRule           = 7
-	BlockStart           = 10
-	BlockEnd             = 11
-	Other                = 99
+	Empty         LineType = 0
+	Comment                = 1
+	Variable               = 2
+	Monitor                = 3
+	EnvVariable            = 4
+	Autostart              = 5
+	Binding                = 6
+	WindowRule             = 7
+	LayerRule              = 8
+	WorkspaceRule          = 9
+	BlockStart             = 10
+	BlockEnd               = 11
+	Permission             = 12
+	Gesture                = 13
+	Source                 = 14
+	Other                  = 99
 )
 
 type RawLine struct {
@@ -52,7 +57,7 @@ func (r *RawLine) ParseBlockKey() KeyPart {
 }
 
 func (r *RawLine) Parse(skipKey bool) (KeyPart, ValuePart) {
-	buff := strings.Split(r.Content, "=")
+	buff := strings.SplitN(r.Content, "=", 2)
 	k := KeyPart{Key: strings.TrimSpace(buff[0])}
 	if len(buff) == 1 {
 		return k, ValuePart{Values: make([]string, 0)}
@@ -95,20 +100,32 @@ func ParseLine(lineNo int, content string) RawLine {
 		lineType = Comment
 	} else if strings.HasPrefix(n, "$") {
 		lineType = Variable
+	} else if strings.HasSuffix(n, "{") {
+		// Blocks take precedence over keyword prefixes so that block
+		// forms like "monitorv2 {" and "windowrule {" nest properly.
+		lineType = BlockStart
+	} else if strings.HasPrefix(n, "}") {
+		lineType = BlockEnd
 	} else if strings.HasPrefix(n, "monitor") {
 		lineType = Monitor
 	} else if strings.HasPrefix(n, "env") {
 		lineType = EnvVariable
-	} else if strings.HasPrefix(n, "exec-once") {
+	} else if strings.HasPrefix(n, "exec") {
 		lineType = Autostart
-	} else if strings.HasSuffix(n, "{") {
-		lineType = BlockStart
-	} else if strings.HasPrefix(n, "}") {
-		lineType = BlockEnd
 	} else if strings.HasPrefix(n, "bind") {
 		lineType = Binding
 	} else if strings.HasPrefix(n, "windowrule") {
 		lineType = WindowRule
+	} else if strings.HasPrefix(n, "layerrule") {
+		lineType = LayerRule
+	} else if strings.HasPrefix(n, "workspace") {
+		lineType = WorkspaceRule
+	} else if strings.HasPrefix(n, "permission") {
+		lineType = Permission
+	} else if strings.HasPrefix(n, "gesture") {
+		lineType = Gesture
+	} else if strings.HasPrefix(n, "source") {
+		lineType = Source
 	} else {
 		lineType = Other
 	}
@@ -139,7 +156,7 @@ func (c *ConfigFile) backup() error {
 
 	defer dest.Close()
 
-	_, err = io.Copy(src, dest)
+	_, err = io.Copy(dest, src)
 
 	if err != nil {
 		return err
@@ -301,51 +318,63 @@ type GroupedItem struct {
 }
 
 type GroupedConfig struct {
-	Source    string
-	Variables []GroupedItem
-	Monitors  []GroupedItem
-	Env       []GroupedItem
-	Autostart []GroupedItem
-	Bindings  []GroupedItem
-	Branches  []Branch
+	Source      string
+	Variables   []GroupedItem
+	Monitors    []GroupedItem
+	Env         []GroupedItem
+	Autostart   []GroupedItem
+	Bindings    []GroupedItem
+	WindowRules []GroupedItem
+	LayerRules  []GroupedItem
+	Workspaces  []GroupedItem
+	Permissions []GroupedItem
+	Gestures    []GroupedItem
+	Sources     []GroupedItem
+	Branches    []Branch
 }
 
 func BuildGroupedConfig(cfg *ConfigFile) GroupedConfig {
-	variables := make([]GroupedItem, 0)
-	monitors := make([]GroupedItem, 0)
-	env := make([]GroupedItem, 0)
-	autostart := make([]GroupedItem, 0)
-	bindings := make([]GroupedItem, 0)
-	branches := make([]Branch, 0)
+	g := GroupedConfig{Source: cfg.Source}
 
 	for _, b := range cfg.branches {
-		if b.Line.Type == Variable {
+		switch b.Line.Type {
+		case Variable:
 			k, v := b.Line.Parse(false)
-			variables = append(variables, GroupedItem{Ref: b.Line, Key: k, Value: v})
-		} else if b.Line.Type == Monitor {
+			g.Variables = append(g.Variables, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Monitor:
 			k, v := b.Line.Parse(true)
-			monitors = append(monitors, GroupedItem{Ref: b.Line, Key: k, Value: v})
-		} else if b.Line.Type == EnvVariable {
+			g.Monitors = append(g.Monitors, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case EnvVariable:
 			k, v := b.Line.Parse(true)
-			env = append(env, GroupedItem{Ref: b.Line, Key: k, Value: v})
-		} else if b.Line.Type == Autostart {
+			g.Env = append(g.Env, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Autostart:
 			k, v := b.Line.Parse(true)
-			autostart = append(autostart, GroupedItem{Ref: b.Line, Key: k, Value: v})
-		} else if b.Line.Type == Binding {
+			g.Autostart = append(g.Autostart, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Binding:
 			k, v := b.Line.Parse(false)
-			bindings = append(bindings, GroupedItem{Ref: b.Line, Key: k, Value: v})
-		} else if b.Line.Type == BlockStart {
-			branches = append(branches, b)
+			g.Bindings = append(g.Bindings, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case WindowRule:
+			k, v := b.Line.Parse(false)
+			g.WindowRules = append(g.WindowRules, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case LayerRule:
+			k, v := b.Line.Parse(false)
+			g.LayerRules = append(g.LayerRules, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case WorkspaceRule:
+			k, v := b.Line.Parse(true)
+			g.Workspaces = append(g.Workspaces, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Permission:
+			k, v := b.Line.Parse(true)
+			g.Permissions = append(g.Permissions, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Gesture:
+			k, v := b.Line.Parse(false)
+			g.Gestures = append(g.Gestures, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case Source:
+			k, v := b.Line.Parse(false)
+			g.Sources = append(g.Sources, GroupedItem{Ref: b.Line, Key: k, Value: v})
+		case BlockStart:
+			g.Branches = append(g.Branches, b)
 		}
 	}
 
-	return GroupedConfig{
-		Source:    cfg.Source,
-		Variables: variables,
-		Monitors:  monitors,
-		Env:       env,
-		Autostart: autostart,
-		Bindings:  bindings,
-		Branches:  branches,
-	}
+	return g
 }

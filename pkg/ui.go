@@ -101,6 +101,36 @@ func BuildApp(gconf GroupedConfig) *tview.Application {
 		addLeaf(v.Ref, v.Key.Key, v.Value.Values, bindingsBranch)
 	}
 
+	gesturesBranch := addBranch("Gestures", root)
+	for _, v := range gconf.Gestures {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, gesturesBranch)
+	}
+
+	windowRulesBranch := addBranch("Window Rules", root)
+	for _, v := range gconf.WindowRules {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, windowRulesBranch)
+	}
+
+	layerRulesBranch := addBranch("Layer Rules", root)
+	for _, v := range gconf.LayerRules {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, layerRulesBranch)
+	}
+
+	workspacesBranch := addBranch("Workspace Rules", root)
+	for _, v := range gconf.Workspaces {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, workspacesBranch)
+	}
+
+	permissionsBranch := addBranch("Permissions", root)
+	for _, v := range gconf.Permissions {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, permissionsBranch)
+	}
+
+	sourcesBranch := addBranch("Sources", root)
+	for _, v := range gconf.Sources {
+		addLeaf(v.Ref, v.Key.Key, v.Value.Values, sourcesBranch)
+	}
+
 	// Deal with all other Branches
 	otherBranch := addBranch("Other", root)
 	for _, b := range gconf.Branches {
